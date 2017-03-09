@@ -97,8 +97,8 @@ def main():
     if ( not os.path.isfile(args.file)):
         print "Error: File {} not found".format(args.file)
     else:
-        decryptedName = decrypt_name(args.file,args.password)
-        with open(args.file, 'rb') as in_file, open(decryptedName, 'wb') as out_file:
+        decryptedName = decrypt_name(os.path.basename(args.file),args.password)
+        with open(args.file, 'rb') as in_file, open(os.path.join(os.path.dirname(args.file),decryptedName), 'wb') as out_file:
            decrypt_file(in_file, out_file, args.password)
         in_file.close()
         out_file.close()    
