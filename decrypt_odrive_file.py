@@ -7,10 +7,13 @@ import hashlib
 import sys
 import argparse
 import os
+if sys.platform.startswith('win32'):
+    import win32file
 
 SALT_LENGTH = 8
 VERSION_LENGTH = 1
 CURRENT_VERSION = '1'
+INVALID_NAME = 'invalid.name.000'
 
 def hmac_sha_256(password, salt):
     return Crypto.Hash.HMAC.new(password, salt, Crypto.Hash.SHA256).digest()
@@ -28,38 +31,80 @@ def derive_key(salt, password):
 def unpad_pkcs7(s):
     return s[:-ord(s[len(s)-1:])]
 
-def decrypt_name(ciphertextName, password):
+def decrypt_name(ciphertext_name, password):
     try:
-        ciphertextBytes = ciphertextName.encode('ascii')
+        ciphertext_bytes = ciphertext_name.encode('ascii')
     except UnicodeEncodeError as e:
-        print "Invalid filename with exception: {}".format(e)
-        sys.exit(1)
+        print ciphertext_name + " is an invalid filename (may not be encrypted) with exception: {}".format(e)
+        return INVALID_NAME
 
     try:
-        decodedName = base64.urlsafe_b64decode(ciphertextBytes)
+        decoded_name = base64.urlsafe_b64decode(ciphertext_bytes)
     except TypeError as e:
-       print "Invalid filename with exception: {}".format(e)
-       sys.exit(1)
+       print ciphertext_name + " is an invalid filename (may not be encrypted) with exception: {}".format(e)
+       return INVALID_NAME
 
-    versionNumber = decodedName[:VERSION_LENGTH]
+    version_number = decoded_name[:VERSION_LENGTH]
 
-    if versionNumber != CURRENT_VERSION:
-        raise ValueError("Encryption version: {} is not supported".format(versionNumber))
+    if version_number != CURRENT_VERSION:
+        print "Encryption version: {} is not supported".format(version_number)
+        return INVALID_NAME
 
-    salt = decodedName[VERSION_LENGTH:VERSION_LENGTH + SALT_LENGTH]
-    iv = decodedName[VERSION_LENGTH + SALT_LENGTH: VERSION_LENGTH + SALT_LENGTH + Crypto.Cipher.AES.block_size]
+    salt = decoded_name[VERSION_LENGTH:VERSION_LENGTH + SALT_LENGTH]
+    iv = decoded_name[VERSION_LENGTH + SALT_LENGTH: VERSION_LENGTH + SALT_LENGTH + Crypto.Cipher.AES.block_size]
     key = derive_key(salt, password)
-    ciphertext = decodedName[VERSION_LENGTH + SALT_LENGTH + Crypto.Cipher.AES.block_size:]
+    ciphertext = decoded_name[VERSION_LENGTH + SALT_LENGTH + Crypto.Cipher.AES.block_size:]
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CBC, iv)
-    paddedPlaintext = cipher.decrypt(ciphertext)
+    padded_plaintext = cipher.decrypt(ciphertext)
 
-    if not paddedPlaintext.startswith('\0\0\0\0'):
-        raise ValueError("Invalid Filename: {}".format(ciphertextName))
+    if not padded_plaintext.startswith('\0\0\0\0'):
+        print "Invalid Filename: {}".format(ciphertext_name)
+        return INVALID_NAME
 
-    prefixedName = unpad_pkcs7(paddedPlaintext).decode('utf-8')
-    plaintextName = prefixedName[4:]
+    prefixed_name = unpad_pkcs7(padded_plaintext).decode('utf-8')
+    plaintext_name = prefixed_name[4:]
 
-    return plaintextName
+    return plaintext_name
+
+def single_file(args,file_path):
+    if sys.platform.startswith('win32'):
+        #full_file_name = os.path.join(os.path.dirname(file_path), os.path.basename(win32file.GetLongPathName(file_path))) #in case we get a short path (8.3)
+        full_file_name = win32file.GetLongPathName(file_path) #in case we get a short path (8.3)
+    else:
+        full_file_name = file_path
+    #print full_file_name
+    if (not os.path.isfile(full_file_name) and not os.path.isdir(full_file_name)):
+        print "Error: File/Folder {} not found".format(full_file_name)
+        return
+    elif not full_file_name.endswith(('.cloud', '.cloudf')):
+        decrypted_name = decrypt_name(os.path.basename(full_file_name),args.password) 
+        if decrypted_name != INVALID_NAME:
+            if args.nameonly is False:
+                if (os.path.isdir(full_file_name)):
+                    if args.renamefolder:
+                        os.rename(full_file_name, os.path.join(os.path.dirname(full_file_name),decrypted_name))
+                        print "'" + full_file_name + "' renamed to '" + decrypted_name + "'"
+                    else:
+                        print "'" + full_file_name + "' not renamed to '" + decrypted_name + "'"
+                else:
+                    with open(full_file_name, 'rb') as in_file, open(os.path.join(os.path.dirname(full_file_name),decrypted_name), 'wb') as out_file:
+                        decrypt_file(in_file, out_file, args.password)
+                    print "Decrypted file written to {}".format(os.path.abspath(out_file.name))
+                    in_file.close()
+                    out_file.close()
+            else:
+                #print "'" + os.path.basename(full_file_name) + "' decrypted to '" + decrypted_name + "'"
+                print decrypted_name
+
+def all_files(args, file_path):
+    for root, dirs, files in os.walk(file_path):
+        for f in files:
+            if not f.endswith(('.cloud', '.cloudf')):
+                if ((args.filter is None) or (args.filter is not None and args.filter in os.path.join(root,decrypt_name(f,args.password)))):
+                    single_file(args,os.path.join(root,f))
+        for d in dirs:
+            if ((args.filter is None) or (args.filter is not None and args.filter in os.path.join(root,decrypt_name(d,args.password)))):
+                single_file(args,os.path.join(root,d))
 
 def decrypt_file(in_file, out_file, password):
     calcHash = hashlib.sha256()
@@ -71,14 +116,13 @@ def decrypt_file(in_file, out_file, password):
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CBC, iv)
     next_chunk = ''
     finished = False
-    
     while not finished:
         chunk, next_chunk = next_chunk, cipher.decrypt(in_file.read(4096 * Crypto.Cipher.AES.block_size))
         if len(next_chunk) == 0:
-                chunk = unpad_pkcs7(chunk)
-                fileHash = chunk[-(calcHash.digest_size):]
-                chunk = chunk[:-(calcHash.digest_size)]
-                finished = True
+            chunk = unpad_pkcs7(chunk)
+            fileHash = chunk[-(calcHash.digest_size):]
+            chunk = chunk[:-(calcHash.digest_size)]
+            finished = True
         out_file.write(chunk)
         calcHash.update(chunk)
 
@@ -87,22 +131,26 @@ def decrypt_file(in_file, out_file, password):
 
 def get_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument(u"file", type=str, help=u"The file to decrypt")
-    parser.add_argument(u"password", type=str, help=u"The passphrase")
-    
+    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from",required=True)
+    parser.add_argument(u"--password", type=str, help=u"The passphrase",required=True)
+    parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decreypted name, only",required=False)
+    parser.add_argument(u"--renamefolder", action="store_true", default=False, help=u"Rename if the target is a folder",required=False)
+    parser.add_argument(u"--recursive", action="store_true", default=False, help=u"Recurse through given path",required=False)
+    parser.add_argument(u"--filter", type=str, help=u"Only process files with this simple substring filter",required=False)
     return parser.parse_args()
 
 def main():
     args = get_arguments()
-    if ( not os.path.isfile(args.file)):
-        print "Error: File {} not found".format(args.file)
+    file_path = args.path
+    if sys.platform.startswith('win32'):
+        file_path = u"\\\\?\\" + file_path
+    if (not os.path.isfile(file_path) and not os.path.isdir(file_path)):
+        print "Error: File/Folder {} not found".format(full_file_name)
+        return
+    if args.recursive:
+        all_files(args, file_path)
     else:
-        decryptedName = decrypt_name(os.path.basename(args.file),args.password)
-        with open(args.file, 'rb') as in_file, open(os.path.join(os.path.dirname(args.file),decryptedName), 'wb') as out_file:
-           decrypt_file(in_file, out_file, args.password)
-        print "Decrypted file written to {}".format(os.path.abspath(out_file.name))
-        in_file.close()
-        out_file.close()    
-
+        single_file(args, file_path)
+    
 if __name__ == "__main__":
     main()
