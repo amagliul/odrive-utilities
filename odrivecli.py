@@ -478,16 +478,19 @@ class Sync(OdriveSynchronousCommand):
 class RecursiveSync(object):
     COMMAND_NAME = "recursive"
     HELP = "recursively sync"
+    NO_DOWNLOAD_ARGUMENT_HELP = "do not download (used with --recursive)"
+    NO_DOWNLOAD_ARGUMENT_NAME = "nodownload"
     
-    def __init__(self, agentPort, desktopPort, folderPath):
+    def __init__(self, agentPort, desktopPort, folderPath, noDownload):
         self.agentPort = agentPort
         self.desktopPort = desktopPort
         self.folderPath = folderPath
+        self.noDownload = noDownload
         
     def _sync_recursively(self):
         newFolderPath = self.folderPath
         if sys.platform.startswith('win32'):
-            newFolderPath = u"\\\\?\\" + newFolderPath
+            newFolderPath = u"\\\\?\\" + newFolderPath #those pesky long paths...
         filesRemain = 1
         if self.folderPath.endswith(('.cloud', '.cloudf')):
             command = Sync(agentPort=self.agentPort,
@@ -508,12 +511,16 @@ class RecursiveSync(object):
             filesRemain = 0
             for root, dirs, files in os.walk(newFolderPath):
                 for f in files:
-                    if f.endswith(('.cloud', '.cloudf')):
+                    if f.endswith('.cloudf') or (f.endswith('.cloud') and not self.noDownload):
                         filesRemain = 1
+                        if sys.platform.startswith('win32'):
+                            newPath = os.path.join(expand_user(root),f)[4:] #odrive does its own prefixing, so remove it if on Win
+                        else:
+                            newPath = os.path.join(expand_user(root),f)
                         command = Sync(agentPort=self.agentPort,
                            desktopPort=self.desktopPort,
-                           placeholderPath=os.path.join(expand_user(root),f))
-                        
+                           placeholderPath=newPath)
+
                         success = command.execute()
 
                         if not success:
@@ -1028,8 +1035,15 @@ def parse_args():
                             type=unicode_path,
                             help=Sync.PLACEHOLDER_PATH_ARGUMENT_HELP)
     syncParser.add_argument("--" + RecursiveSync.COMMAND_NAME,
-                            action="store_true", default=False, 
-                            help=RecursiveSync.HELP,required=False)
+                            action="store_true",
+                            default=False, 
+                            help=RecursiveSync.HELP,
+                            required=False)
+    syncParser.add_argument("--" + RecursiveSync.NO_DOWNLOAD_ARGUMENT_NAME,
+                            action="store_true",
+                            default=False, 
+                            help=RecursiveSync.NO_DOWNLOAD_ARGUMENT_HELP,
+                            required=False)
 
     streamParser = subparsers.add_parser(Stream.COMMAND_NAME, help=Stream.HELP)
     streamParser.add_argument(Stream.PATH_ARGUMENT_NAME,
@@ -1179,7 +1193,8 @@ def main():
         if getattr(args, RecursiveSync.COMMAND_NAME):
             recSync = RecursiveSync(agentPort=agentProtocolServerPort,
                                     desktopPort=desktopProtocolServerPort,
-                                    folderPath=syncPath)
+                                    folderPath=syncPath,
+                                    noDownload=getattr(args, RecursiveSync.NO_DOWNLOAD_ARGUMENT_NAME))
             recSync._sync_recursively()
             print("Done with recursive sync of " + syncPath)
             print("Current running downloads:")

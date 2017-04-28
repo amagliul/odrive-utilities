@@ -47,7 +47,10 @@ def get_out_file_name(xl_folder):
     return xl_folder[:-40]
 
 def assemble_all_xl_files(folder):
-    print("nothing here yet")
+    for root, dirs, files in os.walk(folder):
+        for d in dirs:
+            if d.endswith('.xlarge'):
+                assemble_one_xl_file(os.path.join(root,d))
 
 def assemble_one_xl_file(xl_folder):
     if ( not os.path.isdir(xl_folder)):
@@ -98,20 +101,20 @@ def main():
     args = get_arguments()
     recurse = 0
     if args.xlfolder is not None:
-        file_path = args.xlfolder
+        folder_path = args.xlfolder
     elif args.folder is not None:
-        file_path = args.folder
+        folder_path = args.folder
         recurse = 1
     else:
         print("Nothing to do! Please use --help or -h for help.")
         return
     if sys.platform.startswith('win32'):
-        file_path = u"\\\\?\\" + file_path
+        folder_path = u"\\\\?\\" + folder_path
     
     if recurse:
-        assemble_all_xl_files(file_path)
+        assemble_all_xl_files(folder_path)
     else:
-        assemble_one_xl_file(file_path)
+        assemble_one_xl_file(folder_path)
     
 if __name__ == "__main__":
     main()
