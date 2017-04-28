@@ -55,7 +55,7 @@ def assemble_all_xl_files(folder):
 def assemble_one_xl_file(xl_folder):
     if ( not os.path.isdir(xl_folder)):
         print("Error: Folder {} not found".format(xl_folder))
-    elif ( not os.path.isfile(xl_folder + "\\.meta")):
+    elif ( not os.path.isfile(os.path.join(xl_folder,".meta"))):
         print("Error: XL file is not complete!")
     else:
         out_file_name = get_out_file_name(xl_folder)
@@ -66,7 +66,7 @@ def assemble_one_xl_file(xl_folder):
                 perform_xl_assembly(xl_folder, out_file)
 
 def perform_xl_assembly(xl_folder, out_file):                
-    with open(xl_folder + "\\.meta", 'rb') as meta_file:
+    with open(os.path.join(xl_folder, ".meta"), 'rb') as meta_file:
         meta_data = meta_file.read()
     meta_file_contents = []
     for line in meta_data.split(u"\n"):
