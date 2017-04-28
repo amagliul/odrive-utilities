@@ -41,19 +41,19 @@ def parse_meta_file(meta_file_contents):
                 if total_segments == len(segments):
                     return segments
     except Exception as e:
-        print "Problem reading xl meta file contents: {}".format(e)
+        print("Problem reading xl meta file contents: {}".format(e))
 
 def get_out_file_name(xl_folder):
     return xl_folder[:-40]
 
 def assemble_all_xl_files(folder):
-    print "nothing here yet"
+    print("nothing here yet")
 
 def assemble_one_xl_file(xl_folder):
     if ( not os.path.isdir(xl_folder)):
-        print "Error: Folder {} not found".format(xl_folder)
+        print("Error: Folder {} not found".format(xl_folder))
     elif ( not os.path.isfile(xl_folder + "\\.meta")):
-        print "Error: XL file is not complete!"
+        print("Error: XL file is not complete!")
     else:
         out_file_name = get_out_file_name(xl_folder)
         if os.path.isfile(out_file_name):
@@ -103,7 +103,7 @@ def main():
         file_path = args.folder
         recurse = 1
     else:
-        print "Nothing to do! Please use --help or -h for help."
+        print("Nothing to do! Please use --help or -h for help.")
         return
     if sys.platform.startswith('win32'):
         file_path = u"\\\\?\\" + file_path

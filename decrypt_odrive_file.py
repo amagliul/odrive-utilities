@@ -7,8 +7,6 @@ import hashlib
 import sys
 import argparse
 import os
-if sys.platform.startswith('win32'):
-    import win32file
 
 SALT_LENGTH = 8
 VERSION_LENGTH = 1
@@ -47,7 +45,7 @@ def decrypt_name(ciphertext_name, password):
     version_number = decoded_name[:VERSION_LENGTH]
 
     if version_number != CURRENT_VERSION:
-        print "Encryption version: {} is not supported".format(version_number)
+        print("Encryption version: {} is not supported".format(version_number))
         return INVALID_NAME
 
     salt = decoded_name[VERSION_LENGTH:VERSION_LENGTH + SALT_LENGTH]
@@ -58,7 +56,7 @@ def decrypt_name(ciphertext_name, password):
     padded_plaintext = cipher.decrypt(ciphertext)
 
     if not padded_plaintext.startswith('\0\0\0\0'):
-        print "Invalid Filename: {}".format(ciphertext_name)
+        print("Invalid Filename: {}".format(ciphertext_name))
         return INVALID_NAME
 
     prefixed_name = unpad_pkcs7(padded_plaintext).decode('utf-8')
@@ -68,13 +66,12 @@ def decrypt_name(ciphertext_name, password):
 
 def single_file(args,file_path):
     if sys.platform.startswith('win32'):
-        #full_file_name = os.path.join(os.path.dirname(file_path), os.path.basename(win32file.GetLongPathName(file_path))) #in case we get a short path (8.3)
-        full_file_name = win32file.GetLongPathName(file_path) #in case we get a short path (8.3)
+        full_file_name = file_path
     else:
         full_file_name = file_path
-    #print full_file_name
+
     if (not os.path.isfile(full_file_name) and not os.path.isdir(full_file_name)):
-        print "Error: File/Folder {} not found".format(full_file_name)
+        print("Error: File/Folder {} not found".format(full_file_name))
         return
     elif not full_file_name.endswith(('.cloud', '.cloudf')):
         decrypted_name = decrypt_name(os.path.basename(full_file_name),args.password) 
@@ -83,18 +80,17 @@ def single_file(args,file_path):
                 if (os.path.isdir(full_file_name)):
                     if args.renamefolder:
                         os.rename(full_file_name, os.path.join(os.path.dirname(full_file_name),decrypted_name))
-                        print "'" + full_file_name + "' renamed to '" + decrypted_name + "'"
+                        print("'" + full_file_name + "' renamed to '" + decrypted_name + "'")
                     else:
-                        print "'" + full_file_name + "' not renamed to '" + decrypted_name + "'"
+                        print("'" + full_file_name + "' not renamed to '" + decrypted_name + "'")
                 else:
                     with open(full_file_name, 'rb') as in_file, open(os.path.join(os.path.dirname(full_file_name),decrypted_name), 'wb') as out_file:
                         decrypt_file(in_file, out_file, args.password)
-                    print "Decrypted file written to {}".format(os.path.abspath(out_file.name))
+                    print("Decrypted file written to {}".format(os.path.abspath(out_file.name)))
                     in_file.close()
                     out_file.close()
             else:
-                #print "'" + os.path.basename(full_file_name) + "' decrypted to '" + decrypted_name + "'"
-                print decrypted_name
+                print os.path.abspath(full_file_name)[4:] + ";" + decrypted_name
 
 def all_files(args, file_path):
     for root, dirs, files in os.walk(file_path):
@@ -126,8 +122,8 @@ def decrypt_file(in_file, out_file, password):
         out_file.write(chunk)
         calcHash.update(chunk)
 
-    print "Original Hash:   {}".format("".join("{:02x}".format(ord(c)) for c in fileHash))
-    print "Calculated Hash: {}".format(calcHash.hexdigest())
+    print("Original Hash:   {}".format("".join("{:02x}".format(ord(c)) for c in fileHash)))
+    print("Calculated Hash: {}".format(calcHash.hexdigest()))
 
 def get_arguments():
     parser = argparse.ArgumentParser()
@@ -145,7 +141,7 @@ def main():
     if sys.platform.startswith('win32'):
         file_path = u"\\\\?\\" + file_path
     if (not os.path.isfile(file_path) and not os.path.isdir(file_path)):
-        print "Error: File/Folder {} not found".format(full_file_name)
+        print("Error: File/Folder {} not found".format(full_file_name))
         return
     if args.recursive:
         all_files(args, file_path)
