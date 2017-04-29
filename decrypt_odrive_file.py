@@ -86,10 +86,8 @@ def decrypt_and_rename(args,encrypted_path,decrypted_name):
                     with open(encrypted_path, 'rb') as in_file, open(os.path.join(os.path.dirname(encrypted_path),decrypted_name), 'wb') as out_file:
                         decrypt_file(in_file, out_file, args.password)
                     print("Decrypted file written to {}".format(os.path.abspath(out_file.name)))
-                    in_file.close()
-                    out_file.close()
         else:
-            print os.path.abspath(encrypted_path)[4:] + ";" + decrypted_name
+            print((os.path.abspath(encrypted_path)[4:] if sys.platform.startswith('win32') else os.path.abspath(encrypted_path)) + ";" + decrypted_name)
 
 def all_files(args, file_path):
     filesRemain = True    
