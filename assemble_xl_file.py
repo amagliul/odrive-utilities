@@ -53,8 +53,8 @@ def assemble_all_xl_files(folder):
                 assemble_one_xl_file(os.path.join(root,d))
 
 def assemble_one_xl_file(xl_folder):
-    if ( not os.path.isdir(xl_folder)):
-        print("Error: Folder {} not found".format(xl_folder))
+    if (not os.path.isdir(xl_folder) or not xl_folder.endswith("xlarge")):
+        print("Error: XL folder {} not found or not an XL folder".format(xl_folder))
     elif ( not os.path.isfile(os.path.join(xl_folder,".meta"))):
         print("Error: XL file is not complete!")
     else:
@@ -68,10 +68,7 @@ def assemble_one_xl_file(xl_folder):
 def perform_xl_assembly(xl_folder, out_file):                
     with open(os.path.join(xl_folder, ".meta"), 'rb') as meta_file:
         meta_data = meta_file.read()
-    meta_file_contents = []
-    for line in meta_data.split(u"\n"):
-        if line:
-            meta_file_contents.append(line)
+    meta_file_contents = meta_data.split(u"\n")
     xl_segments = parse_meta_file(meta_file_contents)
     for segment in xl_segments:
         segment_file_name = segment.segment_hash
@@ -93,25 +90,17 @@ def add_xl_file_part(in_file, out_file):
 
 def get_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument(u"--xlfolder", type=str, help=u"The xl folder to assemble", required=False)
-    parser.add_argument(u"--folder", type=str, help=u"The folder to start recursive xl assembly", required=False)
+    parser.add_argument(u"--path", type=str, help=u"The path to process for xl files", required=True)
+    parser.add_argument(u"--recursive", action="store_true", default=False, help=u"Recursive xl assembly for the specified path", required=False)
     return parser.parse_args()
 
 def main():
     args = get_arguments()
-    recurse = 0
-    if args.xlfolder is not None:
-        folder_path = args.xlfolder
-    elif args.folder is not None:
-        folder_path = args.folder
-        recurse = 1
-    else:
-        print("Nothing to do! Please use --help or -h for help.")
-        return
+    folder_path = args.path
     if sys.platform.startswith('win32'):
         folder_path = u"\\\\?\\" + folder_path
     
-    if recurse:
+    if args.recursive:
         assemble_all_xl_files(folder_path)
     else:
         assemble_one_xl_file(folder_path)

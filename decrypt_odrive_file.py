@@ -94,23 +94,29 @@ def single_file(args,file_path):
                 print os.path.abspath(full_file_name)[4:] + ";" + decrypted_name
 
 def all_files(args, file_path):
-    filesRemain = 1    
+    filesRemain = True    
     while filesRemain:
-        filesRemain = 0
+        filesRemain = False
         for root, dirs, files in os.walk(file_path):
             for f in files:
                 if not f.endswith(('.cloud', '.cloudf')):
                     decrypted_file_name = decrypt_name(f,args.password)
                     decrypted_file_path = os.path.join(root,decrypted_file_name) 
-                    if ((decrypted_file_name != INVALID_NAME and not os.path.isfile(decrypted_file_path)) and ((args.filter is None) or (args.filter is not None and args.filter in os.path.join(root,decrypted_file_name)))):
-                        filesRemain = 1
+                    if ((decrypted_file_name != INVALID_NAME and not os.path.isfile(decrypted_file_path)) 
+                         and ((args.filter is None)
+                         or (args.filter is not None and args.filter in os.path.join(root,decrypted_file_name)))):
+                        if not args.nameonly:
+                            filesRemain = True
                         single_file(args,os.path.join(root,f))
             for d in dirs:
                 if not d.endswith('.xlarge'):
                     decrypted_folder_name = decrypt_name(d,args.password)
                     decrypted_folder_path = os.path.join(root,decrypted_folder_name)
-                    if ((decrypted_folder_name != INVALID_NAME and not os.path.isfile(decrypted_folder_path)) and ((args.filter is None) or (args.filter is not None and args.filter in decrypted_folder_path))):
-                        filesRemain = 1
+                    if ((decrypted_folder_name != INVALID_NAME and not os.path.isfile(decrypted_folder_path))
+                         and ((args.filter is None)
+                         or (args.filter is not None and args.filter in decrypted_folder_path))):
+                        if not args.nameonly:
+                            filesRemain = True
                         single_file(args,os.path.join(root,d))
 
 def decrypt_file(in_file, out_file, password):
@@ -140,7 +146,7 @@ def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from",required=True)
     parser.add_argument(u"--password", type=str, help=u"The passphrase",required=True)
-    parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decreypted name, only",required=False)
+    parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decrypted name, only",required=False)
     parser.add_argument(u"--renamefolder", action="store_true", default=False, help=u"Rename if the target is a folder",required=False)
     parser.add_argument(u"--recursive", action="store_true", default=False, help=u"Recurse through given path",required=False)
     parser.add_argument(u"--filter", type=str, help=u"Only process files with this simple substring filter (ex: 'xlarge')",required=False)
@@ -148,11 +154,11 @@ def get_arguments():
 
 def main():
     args = get_arguments()
-    file_path = args.path
+    file_path = os.path.expanduser(args.path)
     if sys.platform.startswith('win32'):
         file_path = u"\\\\?\\" + file_path
     if (not os.path.isfile(file_path) and not os.path.isdir(file_path)):
-        print("Error: File/Folder {} not found".format(full_file_name))
+        print("Error: File/Folder {} not found".format(file_path))
         return
     if args.recursive:
         all_files(args, file_path)

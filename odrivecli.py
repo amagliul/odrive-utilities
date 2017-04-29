@@ -487,20 +487,20 @@ class RecursiveSync(object):
         self.folderPath = folderPath
         self.noDownload = noDownload
         
-    def _sync_recursively(self):
+    def execute(self):
         newFolderPath = self.folderPath
         if sys.platform.startswith('win32'):
             newFolderPath = u"\\\\?\\" + newFolderPath #those pesky long paths...
         filesRemain = 1
-        if self.folderPath.endswith(('.cloud', '.cloudf')):
+        if newFolderPath.endswith(('.cloud', '.cloudf')):
             command = Sync(agentPort=self.agentPort,
                            desktopPort=self.desktopPort,
                            placeholderPath=self.folderPath)
-            if self.folderPath.endswith('.cloudf'):
-                newFolderPath = os.path.splitext(self.folderPath)[0]
+            if newFolderPath.endswith('.cloudf'):
+                newFolderPath = os.path.splitext(newFolderPath)[0]
             else:
                 filesRemain = 0
-            
+
             success = command.execute()
 
             if not success:
@@ -514,9 +514,9 @@ class RecursiveSync(object):
                     if f.endswith('.cloudf') or (f.endswith('.cloud') and not self.noDownload):
                         filesRemain = 1
                         if sys.platform.startswith('win32'):
-                            newPath = os.path.join(expand_user(root),f)[4:] #odrive does its own prefixing, so remove it if on Win
+                            newPath = os.path.join(root,f)[4:] #odrive does its own prefixing, so remove it if on Win
                         else:
-                            newPath = os.path.join(expand_user(root),f)
+                            newPath = os.path.join(root,f)
                         command = Sync(agentPort=self.agentPort,
                            desktopPort=self.desktopPort,
                            placeholderPath=newPath)
@@ -526,7 +526,9 @@ class RecursiveSync(object):
                         if not success:
                             print(ERROR_SENDING_COMMAND)
                             sys.exit(1)
-            time.sleep(5)                
+            time.sleep(5)
+        print("Done with recursive sync of " + self.folderPath)
+        return True
 
 class Refresh(OdriveSynchronousCommand):
     COMMAND_NAME = 'refresh'
@@ -1191,14 +1193,10 @@ def main():
     elif args.command == Sync.COMMAND_NAME:
         syncPath = os.path.abspath(expand_user(getattr(args, Sync.PLACEHOLDER_PATH_ARGUMENT_NAME)))
         if getattr(args, RecursiveSync.COMMAND_NAME):
-            recSync = RecursiveSync(agentPort=agentProtocolServerPort,
+            command = RecursiveSync(agentPort=agentProtocolServerPort,
                                     desktopPort=desktopProtocolServerPort,
                                     folderPath=syncPath,
                                     noDownload=getattr(args, RecursiveSync.NO_DOWNLOAD_ARGUMENT_NAME))
-            recSync._sync_recursively()
-            print("Done with recursive sync of " + syncPath)
-            print("Current running downloads:")
-            command = DownloadsStatus(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
         else:
             command = Sync(agentPort=agentProtocolServerPort,
                            desktopPort=desktopProtocolServerPort,
