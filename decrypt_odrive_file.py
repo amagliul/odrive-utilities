@@ -65,33 +65,31 @@ def decrypt_name(ciphertext_name, password):
     return plaintext_name
 
 def single_file(args,file_path):
-    if sys.platform.startswith('win32'):
-        full_file_name = file_path
-    else:
-        full_file_name = file_path
-
-    if (not os.path.isfile(full_file_name) and not os.path.isdir(full_file_name)):
-        print("Error: File/Folder {} not found".format(full_file_name))
+    if (not os.path.isfile(file_path) and not os.path.isdir(file_path)):
+        print("Error: File/Folder {} not found".format(file_path))
         return
-    elif not full_file_name.endswith(('.cloud', '.cloudf')):
-        decrypted_name = decrypt_name(os.path.basename(full_file_name),args.password) 
-        if decrypted_name != INVALID_NAME:
-            if args.nameonly is False:
-                if (os.path.isdir(full_file_name)):
-                    if args.renamefolder and not os.path.isdir(os.path.join(os.path.dirname(full_file_name),decrypted_name)):
-                        os.rename(full_file_name, os.path.join(os.path.dirname(full_file_name),decrypted_name))
-                        print("'" + full_file_name + "' renamed to '" + decrypted_name + "'")
-                    else:
-                        print("'" + full_file_name + "' not renamed to '" + decrypted_name + "'")
+    elif not file_path.endswith(('.cloud', '.cloudf')):
+        decrypted_name = decrypt_name(os.path.basename(file_path),args.password) 
+        decrypt_and_rename(args,file_path,decrypted_name)
+                
+def decrypt_and_rename(args,encrypted_path,decrypted_name):
+    if decrypted_name != INVALID_NAME:
+        if args.nameonly is False:
+            if (os.path.isdir(encrypted_path)):
+                if args.renamefolder and not os.path.isdir(os.path.join(os.path.dirname(encrypted_path),decrypted_name)):
+                    os.rename(encrypted_path, os.path.join(os.path.dirname(encrypted_path),decrypted_name))
+                    print("'" + encrypted_path + "' renamed to '" + decrypted_name + "'")
                 else:
-                    if not os.path.isfile(os.path.join(os.path.dirname(full_file_name),decrypted_name)):
-                        with open(full_file_name, 'rb') as in_file, open(os.path.join(os.path.dirname(full_file_name),decrypted_name), 'wb') as out_file:
-                            decrypt_file(in_file, out_file, args.password)
-                        print("Decrypted file written to {}".format(os.path.abspath(out_file.name)))
-                        in_file.close()
-                        out_file.close()
+                    print("'" + encrypted_path + "' not renamed to '" + decrypted_name + "'")
             else:
-                print os.path.abspath(full_file_name)[4:] + ";" + decrypted_name
+                if not os.path.isfile(os.path.join(os.path.dirname(encrypted_path),decrypted_name)):
+                    with open(encrypted_path, 'rb') as in_file, open(os.path.join(os.path.dirname(encrypted_path),decrypted_name), 'wb') as out_file:
+                        decrypt_file(in_file, out_file, args.password)
+                    print("Decrypted file written to {}".format(os.path.abspath(out_file.name)))
+                    in_file.close()
+                    out_file.close()
+        else:
+            print os.path.abspath(encrypted_path)[4:] + ";" + decrypted_name
 
 def all_files(args, file_path):
     filesRemain = True    
@@ -107,7 +105,7 @@ def all_files(args, file_path):
                          or (args.filter is not None and args.filter in os.path.join(root,decrypted_file_name)))):
                         if not args.nameonly:
                             filesRemain = True
-                        single_file(args,os.path.join(root,f))
+                        decrypt_and_rename(args,os.path.join(root,f),decrypted_file_name)
             for d in dirs:
                 if not d.endswith('.xlarge'):
                     decrypted_folder_name = decrypt_name(d,args.password)
@@ -117,7 +115,7 @@ def all_files(args, file_path):
                          or (args.filter is not None and args.filter in decrypted_folder_path))):
                         if not args.nameonly:
                             filesRemain = True
-                        single_file(args,os.path.join(root,d))
+                        decrypt_and_rename(args,os.path.join(root,d),decrypted_folder_name)
 
 def decrypt_file(in_file, out_file, password):
     calcHash = hashlib.sha256()
@@ -144,12 +142,12 @@ def decrypt_file(in_file, out_file, password):
 
 def get_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from",required=True)
+    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from. **Will not decrypt placeholder files",required=True)
     parser.add_argument(u"--password", type=str, help=u"The passphrase",required=True)
     parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decrypted name, only",required=False)
     parser.add_argument(u"--renamefolder", action="store_true", default=False, help=u"Rename if the target is a folder",required=False)
     parser.add_argument(u"--recursive", action="store_true", default=False, help=u"Recurse through given path",required=False)
-    parser.add_argument(u"--filter", type=str, help=u"Only process files with this simple substring filter (ex: 'xlarge')",required=False)
+    parser.add_argument(u"--filter", type=str, help=u"Only process files/folders with this simple substring path filter (ex: 'xlarge')",required=False)
     return parser.parse_args()
 
 def main():
