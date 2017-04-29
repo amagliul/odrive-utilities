@@ -142,7 +142,7 @@ def decrypt_file(in_file, out_file, password):
 
 def get_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from. **Will not decrypt placeholder files",required=True)
+    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from. **Will not decrypt placeholder files**",required=True)
     parser.add_argument(u"--password", type=str, help=u"The passphrase",required=True)
     parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decrypted name, only",required=False)
     parser.add_argument(u"--renamefolder", action="store_true", default=False, help=u"Rename if the target is a folder",required=False)
