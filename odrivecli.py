@@ -491,6 +491,9 @@ class RecursiveSync(object):
         newFolderPath = self.folderPath
         if sys.platform.startswith('win32'):
             newFolderPath = u"\\\\?\\" + newFolderPath #those pesky long paths...
+        if not os.path.exists(newFolderPath):
+            print(self.folderPath + " doesn't exist!")
+            return True
         filesRemain = 1
         if newFolderPath.endswith(('.cloud', '.cloudf')):
             command = Sync(agentPort=self.agentPort,
