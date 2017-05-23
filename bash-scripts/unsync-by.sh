@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
-ODRIVE_PY="$HOME/temp/odrive python/odrive.py"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    ODRIVE_PY=$(ls -d "$HOME/.odrive/bin/"*/ | tail -1)odrive.py
+else
+    ODRIVE_PY="$HOME/.odrive-agent/bin/odrive.py"
+fi
 RECURSIVE="-maxdepth 1"
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]] ; then
         echo "Usage: unsync_by [-e <extension>] [-s <size in kilobytes>] [-d <days>] [directory path] [-r]"
