@@ -1,7 +1,7 @@
 # odrive-utilities
 This repository contains a few odrive utilities.
 
-assemble_xl_file.py - A command-line utility to assemble odrive IFS files (also know as split files or XL files).
+assemble_xl_file.py - A command-line utility to assemble odrive IFS files (also known as split files or XL files).
 
 ```
 usage: assemble_xl_file.py [-h] --path PATH [--recursive]
