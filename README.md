@@ -58,13 +58,19 @@ emptytrash          empty odrive trash
 shutdown            shutdown odrive
 ```
 
-```odrivecli.py sync -h```
-```usage: odrivecli.py sync [-h] [--recursive] [--nodownload] placeholderPath```
+odrivecli.py sync -h
+```
+usage: odrivecli.py sync [-h] [--recursive] [--nodownload] placeholderPath
+```
 
-```positional arguments:
-  placeholderPath  the path to the placeholder file```
+```
+positional arguments:
+  placeholderPath  the path to the placeholder file
+  ```
 
-```optional arguments:
+```
+optional arguments:
   -h, --help       show this help message and exit
   --recursive      recursively sync
-  --nodownload     do not download (used with --recursive)```
+  --nodownload     do not download (used with --recursive)
+  ```
