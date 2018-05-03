@@ -865,8 +865,9 @@ class UploadsStatus(Status):
                 if uploads:
                     for upload in uploads:
                         name = upload.get('name')
+                        uploadPath = upload.get('path')
                         percentComplete = upload.get('percentComplete')
-                        self._output_message('{} {}%\n'.format(name, percentComplete))
+                        self._output_message('{} {}%\n'.format(uploadPath, percentComplete))
                 else:
                     self._output_message('No uploads.\n')
             except Exception as e:
@@ -887,8 +888,9 @@ class DownloadsStatus(Status):
                 if downloads:
                     for download in downloads:
                         name = download.get('name')
+                        downloadPath = download.get('path')
                         percentComplete = download.get('percentComplete')
-                        self._output_message('{} {}%\n'.format(name, percentComplete))
+                        self._output_message('{} {}%\n'.format(downloadPath, percentComplete))
                 else:
                     self._output_message('No downloads.\n')
             except Exception as e:
