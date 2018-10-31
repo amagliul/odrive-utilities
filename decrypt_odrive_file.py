@@ -32,13 +32,13 @@ def unpad_pkcs7(s):
 def decrypt_name(ciphertext_name, password):
     try:
         ciphertext_bytes = ciphertext_name.encode('ascii')
-    except UnicodeEncodeError as e:
+    except (UnicodeEncodeError, UnicodeDecodeError) as e:
         print ciphertext_name + " is an invalid filename (may not be encrypted) with exception: {}".format(e)
         return INVALID_NAME
 
     try:
         decoded_name = base64.urlsafe_b64decode(ciphertext_bytes)
-    except TypeError as e:
+    except (UnicodeDecodeError, TypeError) as e:
        print ciphertext_name + " is an invalid filename (may not be encrypted) with exception: {}".format(e)
        return INVALID_NAME
 
@@ -52,8 +52,13 @@ def decrypt_name(ciphertext_name, password):
     iv = decoded_name[VERSION_LENGTH + SALT_LENGTH: VERSION_LENGTH + SALT_LENGTH + Crypto.Cipher.AES.block_size]
     key = derive_key(salt, password)
     ciphertext = decoded_name[VERSION_LENGTH + SALT_LENGTH + Crypto.Cipher.AES.block_size:]
-    cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CBC, iv)
-    padded_plaintext = cipher.decrypt(ciphertext)
+
+    try:
+      cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CBC, iv)
+      padded_plaintext = cipher.decrypt(ciphertext)
+    except:
+      print("Error occurred with %s" % key)
+      padded_plaintext = ("ERROR-%s" % ciphertext)
 
     if not padded_plaintext.startswith('\0\0\0\0'):
         print("Invalid Filename: {}".format(ciphertext_name))
@@ -87,7 +92,10 @@ def decrypt_and_rename(args,encrypted_path,decrypted_name):
                         decrypt_file(in_file, out_file, args.password)
                     print("Decrypted file written to {}".format(os.path.abspath(out_file.name)))
         else:
-            print((os.path.abspath(encrypted_path)[4:] if sys.platform.startswith('win32') else os.path.abspath(encrypted_path)) + ";" + decrypted_name)
+	  try:
+            print((os.path.abspath(encrypted_path)[4:] if sys.platform.startswith('win32') else os.path.abspath(encrypted_path)) + "@@@@@@" + decrypted_name)
+	  except:
+	    print("Error occurred with printing %s" % encrypted_path)
 
 def all_files(args, file_path):
     filesRemain = True    
