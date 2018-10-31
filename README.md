@@ -1,6 +1,19 @@
 # odrive-utilities
 This repository contains a few odrive utilities.
 
+# Prerequisites / setup
+
+```
+git clone https://github.com/amagliul/odrive-utilities.git
+virtualenv odrive-utilities
+cd odrive-utilities
+source bin/activate
+pip install wheel && pip install pycrypto # need these packages. 
+python decrypt_odrive_file.py --help
+```
+
+# Synopsis
+
 assemble_xl_file.py - A command-line utility to assemble odrive IFS files (also known as split files or XL files).
 
 ```
