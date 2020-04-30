@@ -326,6 +326,19 @@ class Deauthorize(OdriveCommand):
             }
         }
 
+class Diagnostics(OdriveSynchronousCommand):
+    COMMAND_NAME = 'diagnostics'
+    HELP = "generate diagnostics"
+
+    def __init__(self, agentPort, desktopPort):
+        super(Diagnostics, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+
+    def _get_command_data(self):
+        return {
+            'command': Diagnostics.COMMAND_NAME,
+            'parameters': {
+            }
+        }
 
 class XLThreshold(OdriveCommand):
     COMMAND_NAME = 'xlthreshold'
@@ -346,6 +359,32 @@ class XLThreshold(OdriveCommand):
             }
         }
 
+class EncPassphrase(OdriveSynchronousCommand):
+    COMMAND_NAME = 'encpassphrase'
+    HELP = "specify a passphrase for Encryptor folders"
+    PASSPHRASE_ARGUMENT_NAME = 'passphrase'
+    PASSPHRASE_ARGUMENT_HELP = "Encryptor folder passphrase"
+    ID_ARGUMENT_NAME = 'id'
+    ID_ARGUMENT_HELP = "Encryptor ID"
+    INITIALIZE_ARGUMENT_NAME = 'initialize'
+    INITIALIZE_ARGUMENT_HELP = "Initialize a new Encryptor folder passphrase. Do not use if passphrase has already been set"
+
+
+    def __init__(self, agentPort, desktopPort, passphrase, id, initialize):
+        super(EncPassphrase, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+        self._passphrase = passphrase
+        self._id = id
+        self._initialize = initialize
+
+    def _get_command_data(self):
+        return {
+            'command': EncPassphrase.COMMAND_NAME,
+            'parameters': {
+                EncPassphrase.PASSPHRASE_ARGUMENT_NAME: self._passphrase,
+                EncPassphrase.ID_ARGUMENT_NAME: self._id,
+                EncPassphrase.INITIALIZE_ARGUMENT_NAME: self._initialize
+            }
+        }
 
 class Mount(OdriveSynchronousCommand):
     COMMAND_NAME = 'mount'
@@ -979,6 +1018,19 @@ class EmptyTrash(OdriveSynchronousCommand):
             }
         }
 
+class RestoreTrash(OdriveSynchronousCommand):
+    COMMAND_NAME = 'restoretrash'
+    HELP = "restore odrive trash"
+
+    def __init__(self, agentPort, desktopPort):
+        super(RestoreTrash, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+
+    def _get_command_data(self):
+        return {
+            'command': RestoreTrash.COMMAND_NAME,
+            'parameters': {
+            }
+        }
 
 class Shutdown(OdriveCommand):
     COMMAND_NAME = 'shutdown'
@@ -1079,6 +1131,17 @@ def parse_args():
                                   choices=XLThreshold.THRESHOLD_ARGUMENT_VALUES,
                                   help=XLThreshold.THRESHOLD_ARGUMENT_HELP)
 
+    encPassphraseParser = subparsers.add_parser(EncPassphrase.COMMAND_NAME, help=EncPassphrase.HELP)
+    encPassphraseParser.add_argument(EncPassphrase.PASSPHRASE_ARGUMENT_NAME,
+                                  help=EncPassphrase.PASSPHRASE_ARGUMENT_HELP)
+    encPassphraseParser.add_argument(EncPassphrase.ID_ARGUMENT_NAME,
+                                  help=EncPassphrase.ID_ARGUMENT_HELP)
+    encPassphraseParser.add_argument("--" + EncPassphrase.INITIALIZE_ARGUMENT_NAME,
+                                  help=EncPassphrase.INITIALIZE_ARGUMENT_HELP,
+                                  required=False,
+                                  action="store_true",
+                                  default=False)
+
     syncStateParser = subparsers.add_parser(SyncState.COMMAND_NAME, help=SyncState.HELP)
     syncStateParser.add_argument(SyncState.PATH_ARGUMENT_NAME,
                                  type=unicode_path,
@@ -1117,7 +1180,9 @@ def parse_args():
                                               action='store_true',
                                               help=NotAllowedStatus.HELP)
     subparsers.add_parser(Deauthorize.COMMAND_NAME, help=Deauthorize.HELP)
+    subparsers.add_parser(Diagnostics.COMMAND_NAME, help=Diagnostics.HELP)
     subparsers.add_parser(EmptyTrash.COMMAND_NAME, help=EmptyTrash.HELP)
+    subparsers.add_parser(RestoreTrash.COMMAND_NAME, help=RestoreTrash.HELP)
     subparsers.add_parser(Shutdown.COMMAND_NAME, help=Shutdown.HELP)
 
     if not sys.argv[1:]:
@@ -1176,6 +1241,8 @@ def main():
                                authKey=getattr(args, Authenticate.AUTH_KEY_ARGUMENT_NAME))
     elif args.command == Deauthorize.COMMAND_NAME:
         command = Deauthorize(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
+    elif args.command == Diagnostics.COMMAND_NAME:
+        command = Diagnostics(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
     elif args.command == Mount.COMMAND_NAME:
         command = Mount(agentPort=agentProtocolServerPort,
                         desktopPort=desktopProtocolServerPort,
@@ -1258,9 +1325,16 @@ def main():
         command = XLThreshold(agentPort=agentProtocolServerPort,
                               desktopPort=desktopProtocolServerPort,
                               threshold=getattr(args, XLThreshold.THRESHOLD_ARGUMENT_NAME))
-
+    elif args.command == EncPassphrase.COMMAND_NAME:
+        command = EncPassphrase(agentPort=agentProtocolServerPort,
+                              desktopPort=desktopProtocolServerPort,
+                              passphrase = getattr(args, EncPassphrase.PASSPHRASE_ARGUMENT_NAME),
+                              id = getattr(args, EncPassphrase.ID_ARGUMENT_NAME),
+                              initialize = getattr(args, EncPassphrase.INITIALIZE_ARGUMENT_NAME))
     elif args.command == EmptyTrash.COMMAND_NAME:
         command = EmptyTrash(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
+    elif args.command == RestoreTrash.COMMAND_NAME:
+        command = RestoreTrash(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
     elif args.command == Shutdown.COMMAND_NAME:
         command = Shutdown(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
     else:
