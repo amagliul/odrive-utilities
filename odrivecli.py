@@ -13,6 +13,13 @@ import subprocess
 import socket
 import sys
 import time
+import codecs
+
+if sys.version_info < (3, 0):
+   sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
+   sys.stdin = codecs.getreader("utf-8")(sys.stdin)
+else:
+   unicode=str
 
 DESCRIPTION = "odrive Make Cloud Storage THE WAY IT SHOULD BE."
 URL = "https://www.odrive.com"
@@ -67,6 +74,7 @@ if IS_WINDOWS:
             ("Data4", _EightBytes)
         ]
 
+
     FOLDERID_Profile = GUID(
         0x5E6C858F,
         0x0E22,
@@ -84,7 +92,8 @@ class OdriveCommand(object):
         sock = self._get_socket(self._agentPort) or self._get_socket(self._desktopPort)
         if sock:
             try:
-                sock.sendall((json.dumps(self._get_command_data()) + '\n').encode('utf-8'))
+                commandData = self._get_command_data()
+                sock.sendall((json.dumps(commandData) + '\n').encode('utf-8'))
                 return True
             except Exception as e:
                 print(e)
@@ -97,7 +106,12 @@ class OdriveCommand(object):
         if port:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
+                # Since we try agent first, then desktop, timeout the connect attempt quickly (100ms)
+                # Otherwise commands to the desktop clients end up incurring an additional 1000ms delay for
+                # connect timeout. Once connected, set timeout back to None (default)
+                sock.settimeout(0.1)
                 sock.connect((HOST, port))
+                sock.settimeout(None)
                 return sock
             except Exception as e:
                 pass
@@ -140,6 +154,7 @@ class OdriveSynchronousCommand(OdriveCommand):
                     if messageType == OdriveSynchronousCommand._STATUS_MESSAGE:
                         receivedStatusMessage = True
                     lastMessageType = messageType
+
                 self._print_final_response(lastMessageType, receivedStatusMessage)
                 return True
             except Exception as e:
@@ -326,6 +341,7 @@ class Deauthorize(OdriveCommand):
             }
         }
 
+
 class Diagnostics(OdriveSynchronousCommand):
     COMMAND_NAME = 'diagnostics'
     HELP = "generate diagnostics"
@@ -340,12 +356,13 @@ class Diagnostics(OdriveSynchronousCommand):
             }
         }
 
+
 class XLThreshold(OdriveCommand):
     COMMAND_NAME = 'xlthreshold'
     HELP = "split files larger than this threshold"
     THRESHOLD_ARGUMENT_NAME = 'threshold'
-    THRESHOLD_ARGUMENT_HELP = "choose from small(100MB), medium(500MB), large(1GB), xlarge(2GB)"
-    THRESHOLD_ARGUMENT_VALUES = ['small', 'medium', 'large', 'xlarge']
+    THRESHOLD_ARGUMENT_HELP = "choose from never, small (100MB), medium (500MB), large (1GB), xlarge (2GB)"
+    THRESHOLD_ARGUMENT_VALUES = ['never', 'small', 'medium', 'large', 'xlarge']
 
     def __init__(self, agentPort, desktopPort, threshold):
         super(XLThreshold, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
@@ -359,6 +376,99 @@ class XLThreshold(OdriveCommand):
             }
         }
 
+class AutoUnsyncThreshold(OdriveCommand):
+    COMMAND_NAME = 'autounsyncthreshold'
+    HELP = "Set rule for automatically unsyncing files that have not been modified with a certain amount of time"
+    THRESHOLD_ARGUMENT_NAME = 'threshold'
+    THRESHOLD_ARGUMENT_HELP = "choose from never, daily (day), weekly (week), monthly (month)"
+    THRESHOLD_ARGUMENT_VALUES = ['never', 'day', 'week', 'month']
+
+    def __init__(self, agentPort, desktopPort, threshold):
+        super(AutoUnsyncThreshold, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+        self._threshold = threshold
+
+    def _get_command_data(self):
+        return {
+            'command': AutoUnsyncThreshold.COMMAND_NAME,
+            'parameters': {
+                AutoUnsyncThreshold.THRESHOLD_ARGUMENT_NAME: self._threshold
+            }
+        }
+
+class AutoTrashThreshold(OdriveCommand):
+    COMMAND_NAME = 'autotrashthreshold'
+    HELP = "Set rule for automatically emptying the odrive trash"
+    THRESHOLD_ARGUMENT_NAME = 'threshold'
+    THRESHOLD_ARGUMENT_HELP = "choose from never, immediately, every 15 minutes (fifteen), hourly (hour), daily (day)"
+    THRESHOLD_ARGUMENT_VALUES = ['never', 'immediately', 'fifteen', 'hour', 'day']
+
+    def __init__(self, agentPort, desktopPort, threshold):
+        super(AutoTrashThreshold, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+        self._threshold = threshold
+
+    def _get_command_data(self):
+        return {
+            'command': AutoTrashThreshold.COMMAND_NAME,
+            'parameters': {
+                AutoTrashThreshold.THRESHOLD_ARGUMENT_NAME: self._threshold
+            }
+        }
+
+class PlaceholderThreshold(OdriveCommand):
+    COMMAND_NAME = 'placeholderthreshold'
+    HELP = "Set rule for automatically downloading files within a certain size when syncing/expanding a folder"
+    THRESHOLD_ARGUMENT_NAME = 'threshold'
+    THRESHOLD_ARGUMENT_HELP = "choose from never, small (10MB), medium (100MB), large (500MB), always"
+    THRESHOLD_ARGUMENT_VALUES = ['never', 'small', 'medium', 'large', 'always']
+
+    def __init__(self, agentPort, desktopPort, threshold):
+        super(PlaceholderThreshold, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+        self._threshold = threshold
+
+    def _get_command_data(self):
+        return {
+            'command': PlaceholderThreshold.COMMAND_NAME,
+            'parameters': {
+                PlaceholderThreshold.THRESHOLD_ARGUMENT_NAME: self._threshold
+            }
+        }
+
+class FolderSyncRule(OdriveCommand):
+    COMMAND_NAME = 'foldersyncrule'
+    HELP = "Set rule for automatically syncing new remote content. This is usually used after recursively syncing a folder"
+    LOCAL_PATH_ARGUMENT_NAME = "path"
+    LOCAL_PATH_ARGUMENT_HELP = "The local path of the folder to apply the rule to."
+    THRESHOLD_ARGUMENT_NAME = 'threshold'
+    THRESHOLD_ARGUMENT_HELP = "Size in MB (base 10) for the download threshold. Use '0' for nothing and 'inf' for infinite. Files that have a size under this will be downloaded."
+    EXPAND_SUBFOLDERS_ARGUMENT_NAME = 'expandsubfolders'
+    EXPAND_SUBFOLDERS_ARGUMENT_HELP = 'Apply this rule to files and folders underneath the specified folder.'
+
+    def __init__(self, agentPort, desktopPort, path, threshold, expandSubfolders):
+        super(FolderSyncRule, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+        self._path = path
+        self._threshold = threshold
+        self._expandSubfolders = expandSubfolders
+
+    def _get_command_data(self):
+        newFolderPath = make_unicode(self._path)
+        if not os.path.exists(get_os_encoded_path(newFolderPath)):
+            output_message(u'{}\n'.format(newFolderPath + u" doesn't exist!"))
+            return True
+        if not os.path.isdir(get_os_encoded_path(newFolderPath)):
+            output_message(u'{}\n'.format(newFolderPath + u" is not a folder"))
+            return True
+        if not (unicode(self._threshold).isnumeric() or self._threshold == 'inf'):
+            output_message('{}\n'.format(u"Invalid threshold specified"))
+            return True
+        return {
+            'command': FolderSyncRule.COMMAND_NAME,
+            'parameters': {
+                FolderSyncRule.LOCAL_PATH_ARGUMENT_NAME: self._path,
+                FolderSyncRule.THRESHOLD_ARGUMENT_NAME: self._threshold,
+                FolderSyncRule.EXPAND_SUBFOLDERS_ARGUMENT_NAME: self._expandSubfolders
+            }
+        }
+
 class EncPassphrase(OdriveSynchronousCommand):
     COMMAND_NAME = 'encpassphrase'
     HELP = "specify a passphrase for Encryptor folders"
@@ -368,7 +478,6 @@ class EncPassphrase(OdriveSynchronousCommand):
     ID_ARGUMENT_HELP = "Encryptor ID"
     INITIALIZE_ARGUMENT_NAME = 'initialize'
     INITIALIZE_ARGUMENT_HELP = "Initialize a new Encryptor folder passphrase. Do not use if passphrase has already been set"
-
 
     def __init__(self, agentPort, desktopPort, passphrase, id, initialize):
         super(EncPassphrase, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
@@ -383,6 +492,20 @@ class EncPassphrase(OdriveSynchronousCommand):
                 EncPassphrase.PASSPHRASE_ARGUMENT_NAME: self._passphrase,
                 EncPassphrase.ID_ARGUMENT_NAME: self._id,
                 EncPassphrase.INITIALIZE_ARGUMENT_NAME: self._initialize
+            }
+        }
+
+class BackupNow(OdriveSynchronousCommand):
+    COMMAND_NAME = 'backupnow'
+    HELP = "run backup jobs immediately"
+
+    def __init__(self, agentPort, desktopPort):
+        super(BackupNow, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+
+    def _get_command_data(self):
+        return {
+            'command': BackupNow.COMMAND_NAME,
+            'parameters': {
             }
         }
 
@@ -454,18 +577,18 @@ class Backup(OdriveSynchronousCommand):
 class RemoveBackup(OdriveSynchronousCommand):
     COMMAND_NAME = 'removebackup'
     HELP = "remove a backup job"
-    LOCAL_PATH_ARGUMENT_HELP = "local path of the backup folder"
-    LOCAL_PATH_ARGUMENT_NAME = "localPath"
+    BACKUP_ID_ARGUMENT_HELP = "The ID of the backup. Use 'status --backups' to list existing backups"
+    BACKUP_ID_ARGUMENT_NAME = "backupId"
 
-    def __init__(self, agentPort, desktopPort, localPath):
+    def __init__(self, agentPort, desktopPort, backupId):
         super(RemoveBackup, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
-        self._localPath = localPath
+        self._backupId = backupId
 
     def _get_command_data(self):
         return {
             'command': RemoveBackup.COMMAND_NAME,
             'parameters': {
-                RemoveBackup.LOCAL_PATH_ARGUMENT_NAME: self._localPath,
+                RemoveBackup.BACKUP_ID_ARGUMENT_NAME: self._backupId,
             }
         }
 
@@ -508,69 +631,123 @@ class Sync(OdriveSynchronousCommand):
     def _print_final_response(self, lastMessageType, receivedStatusMessge):
         try:
             if sys.stdout.isatty() and receivedStatusMessge and \
-                            lastMessageType == OdriveSynchronousCommand._STATUS_MESSAGE:
+                    lastMessageType == OdriveSynchronousCommand._STATUS_MESSAGE:
                 # no newline on status messages so bump to next line before exit
                 self._output_message('\n')
         except Exception as e:
             pass
+
+
+class SyncAsynchronous(OdriveCommand):
+    COMMAND_NAME = 'sync'
+    HELP = "sync a placeholder"
+    PLACEHOLDER_PATH_ARGUMENT_HELP = "the path to the placeholder file"
+    PLACEHOLDER_PATH_ARGUMENT_NAME = "placeholderPath"
+
+    def __init__(self, agentPort, desktopPort, placeholderPath):
+        super(SyncAsynchronous, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
+        self._placeholderPath = placeholderPath
+
+    def _get_command_data(self):
+        return {
+            'command': SyncAsynchronous.COMMAND_NAME,
+            'parameters': {
+                Sync.PLACEHOLDER_PATH_ARGUMENT_NAME: self._placeholderPath
+            }
+        }
+
 
 class RecursiveSync(object):
     COMMAND_NAME = "recursive"
     HELP = "recursively sync"
     NO_DOWNLOAD_ARGUMENT_HELP = "do not download (used with --recursive)"
     NO_DOWNLOAD_ARGUMENT_NAME = "nodownload"
-    
-    def __init__(self, agentPort, desktopPort, folderPath, noDownload):
+    # Hidden argument to send commands to the sync engine asynchronously (experimental)
+    NO_WAIT_ARGUMENT_NAME = 'nowait'
+
+    def __init__(self, agentPort, desktopPort, folderPath, noDownload, noWait=False):
         self.agentPort = agentPort
         self.desktopPort = desktopPort
         self.folderPath = folderPath
         self.noDownload = noDownload
-        
+        # Set async or sync
+        self.noWait = noWait
+
     def execute(self):
-        newFolderPath = self.folderPath
-        if sys.platform.startswith('win32'):
-            newFolderPath = u"\\\\?\\" + newFolderPath #those pesky long paths...
-        if not os.path.exists(newFolderPath):
-            print(self.folderPath + " doesn't exist!")
+        newFolderPath = make_unicode(self.folderPath)
+        if not os.path.exists(get_os_encoded_path(newFolderPath)):
+            output_message('{}\n'.format(newFolderPath + u" doesn't exist!"))
             return True
-        filesRemain = 1
-        if newFolderPath.endswith(('.cloud', '.cloudf')):
-            command = Sync(agentPort=self.agentPort,
-                           desktopPort=self.desktopPort,
-                           placeholderPath=self.folderPath)
-            if newFolderPath.endswith('.cloudf'):
+        itemsRemain = 1
+        if newFolderPath.endswith((u'.cloud', u'.cloudf', u'.cloud-dev', u'.cloudf-dev')):
+            if self.noWait:
+                output_message(u'Syncing {}\n'.format(newFolderPath))
+                command = SyncAsynchronous(agentPort=self.agentPort,
+                               desktopPort=self.desktopPort,
+                               placeholderPath=newFolderPath)
+            else:
+                command = Sync(agentPort=self.agentPort,
+                            desktopPort=self.desktopPort,
+                            placeholderPath=newFolderPath)
+            if newFolderPath.endswith((u'.cloudf', u'.cloudf-dev')):
                 newFolderPath = os.path.splitext(newFolderPath)[0]
             else:
-                filesRemain = 0
-
+                itemsRemain = 0
             success = command.execute()
-
             if not success:
-                print(ERROR_SENDING_COMMAND)
+                output_message('{}\n'.format(ERROR_SENDING_COMMAND))
                 sys.exit(1)
-    
-        while filesRemain:
-            filesRemain = 0
-            for root, dirs, files in os.walk(newFolderPath):
-                for f in files:
-                    if f.endswith('.cloudf') or (f.endswith('.cloud') and not self.noDownload):
-                        filesRemain = 1
+        lastFilesRemain = 0
+        lastPath = u''
+        retries = 0
+        newPath = None
+        if self.noWait:
+            # Need a slight delay because of the async comm
+            time.sleep(1)
+        while itemsRemain:
+            if self.noWait:
+                # Need a slight delay because of the async comm
+                time.sleep(1)
+            itemsRemain = 0
+            for root, dirs, files in os.walk(get_os_encoded_path(newFolderPath)):
+                root = make_unicode(root)
+                for f in sorted(files):  # Sort so that we always traverse the same way
+                    newPath = None
+                    f = make_unicode(f)
+                    if f.endswith((u'.cloudf', u'.cloudf-dev')) or (f.endswith((u'.cloud', u'.cloud-dev')) and not self.noDownload):
+                        itemsRemain += 1
                         if sys.platform.startswith('win32'):
-                            newPath = os.path.join(root,f)[4:] #odrive does its own prefixing, so remove it if on Win
+                            newPath = os.path.join(root, f)[4:]  # odrive does its own prefixing, so remove it if on Win
                         else:
-                            newPath = os.path.join(root,f)
-                        command = Sync(agentPort=self.agentPort,
-                           desktopPort=self.desktopPort,
-                           placeholderPath=newPath)
-
+                            newPath = os.path.join(root, f)
+                        if self.noWait:
+                            output_message(u'Syncing {}\n'.format(newPath))
+                            command = SyncAsynchronous(agentPort=self.agentPort,
+                                                         desktopPort=self.desktopPort,
+                                                         placeholderPath=newPath)
+                        else:
+                            command = Sync(agentPort=self.agentPort,
+                                           desktopPort=self.desktopPort,
+                                           placeholderPath=newPath)
                         success = command.execute()
-
                         if not success:
-                            print(ERROR_SENDING_COMMAND)
+                            output_message('{}\n'.format(ERROR_SENDING_COMMAND))
                             sys.exit(1)
-            time.sleep(5)
-        print("Done with recursive sync of " + self.folderPath)
+            if lastFilesRemain == itemsRemain and newPath and lastPath == newPath:
+                # If we have the same number of unsynced items as we did on the last pass
+                # and the final item attempted was the same as before, then we did not make any progress
+                # Retry 5 times and then give up
+                if retries > 4:
+                    output_message(u'Done with recursive sync of {}. Unable to sync {} items\n'.format(newFolderPath, itemsRemain))
+                    sys.exit(1)
+                retries += 1
+            else:
+                retries = 0
+            lastPath = newPath
+            lastFilesRemain = itemsRemain
+        output_message(u'Done with recursive sync of {}\n'.format(newFolderPath))
         return True
+
 
 class Refresh(OdriveSynchronousCommand):
     COMMAND_NAME = 'refresh'
@@ -612,7 +789,8 @@ class Refresh(OdriveSynchronousCommand):
                     if childSyncStates:
                         for name, syncState in childSyncStates.items():
                             if supportsColor:
-                                self._output_message('{}\n'.format(name), color=self._get_color_for_sync_state(syncState))
+                                self._output_message('{}\n'.format(name),
+                                                     color=self._get_color_for_sync_state(syncState))
                             else:
                                 self._output_message('{}: {}\n'.format(syncState, name))
         except Exception as e:
@@ -665,7 +843,6 @@ class SyncState(OdriveSynchronousCommand):
     TEXTONLY_ARGUMENT_HELP = "display file and folder states with text rather than color"
     TEXTONLY_ARGUMENT_NAME = '--textonly'
 
-
     def __init__(self, agentPort, desktopPort, path, textonly):
         super(SyncState, self).__init__(agentPort=agentPort, desktopPort=desktopPort)
         self._path = path
@@ -704,7 +881,8 @@ class SyncState(OdriveSynchronousCommand):
                     if childSyncStates:
                         for name, syncState in childSyncStates.items():
                             if supportsColor:
-                                self._output_message('{}\n'.format(name), color=self._get_color_for_sync_state(syncState))
+                                self._output_message('{}\n'.format(name),
+                                                     color=self._get_color_for_sync_state(syncState))
                             else:
                                 self._output_message('{}: {}\n'.format(syncState, name))
         except Exception as e:
@@ -766,7 +944,7 @@ class Status(OdriveSynchronousCommand):
                                                      'Backups: {}'.format(len(message.get('backupJobs'))))
                 self._output_message('\n')
 
-                numSyncRequests = len(message.get('expandRequests'))
+                numSyncRequests = len(message.get('expandRequests')) + len(message.get('syncRequests'))
                 numBackgroundRequests = len(message.get('refreshChildOperations'))
                 numUploads = len(message.get('uploads'))
                 numDownloads = len(message.get('downloads'))
@@ -837,9 +1015,11 @@ class BackupsStatus(Status):
                 backups = message.get('backupJobs')
                 if backups:
                     for backup in backups:
-                        path = backup.get('path')
+                        localPath = backup.get('localPath')
+                        remotePath = backup.get('remotePath')
                         status = backup.get('status')
-                        self._output_message('{}  status:{}\n'.format(path, status))
+                        backupId = backup.get('jobId')
+                        self._output_message('\nID: {}\nLocal Path: {}\nRemote Path: {}\nStatus: {}\n\n'.format(backupId, localPath, remotePath, status))
                 else:
                     self._output_message('No backup jobs.\n')
             except Exception as e:
@@ -856,10 +1036,10 @@ class SyncRequestsStatus(Status):
     def _print_response(self, messageType, message):
         if messageType == OdriveSynchronousCommand._STATUS_MESSAGE:
             try:
-                syncRequests = message.get('expandRequests')
+                syncRequests = message.get('expandRequests') + message.get('syncRequests')
                 if syncRequests:
                     for syncRequest in syncRequests:
-                        name = syncRequest.get('name')
+                        name = syncRequest.get('path') if syncRequest.get('path') else syncRequest.get('firstPathItem')
                         percentComplete = syncRequest.get('percentComplete')
                         self._output_message('{} {}%\n'.format(name, percentComplete))
                 else:
@@ -1018,6 +1198,7 @@ class EmptyTrash(OdriveSynchronousCommand):
             }
         }
 
+
 class RestoreTrash(OdriveSynchronousCommand):
     COMMAND_NAME = 'restoretrash'
     HELP = "restore odrive trash"
@@ -1031,6 +1212,7 @@ class RestoreTrash(OdriveSynchronousCommand):
             'parameters': {
             }
         }
+
 
 class Shutdown(OdriveCommand):
     COMMAND_NAME = 'shutdown'
@@ -1049,7 +1231,8 @@ class Shutdown(OdriveCommand):
 
 def unicode_path(string):
     # need to strip extra quote from paths that end with a slash for windows
-    return unicode(string, sys.getfilesystemencoding() or 'utf-8').strip('"') if sys.version_info < (3,) else string.strip('"')
+    return unicode(string, sys.getfilesystemencoding() or 'utf-8').strip('"') if sys.version_info < \
+                                                                                 (3,) else string.strip('"')
 
 
 def parse_args():
@@ -1085,9 +1268,9 @@ def parse_args():
                               help=Backup.REMOTE_PATH_ARGUMENT_HELP)
 
     removeBackupParser = subparsers.add_parser(RemoveBackup.COMMAND_NAME, help=RemoveBackup.HELP)
-    removeBackupParser.add_argument(RemoveBackup.LOCAL_PATH_ARGUMENT_NAME,
+    removeBackupParser.add_argument(RemoveBackup.BACKUP_ID_ARGUMENT_NAME,
                                     type=unicode_path,
-                                    help=RemoveBackup.LOCAL_PATH_ARGUMENT_HELP)
+                                    help=RemoveBackup.BACKUP_ID_ARGUMENT_HELP)
 
     syncParser = subparsers.add_parser(Sync.COMMAND_NAME, help=Sync.HELP)
     syncParser.add_argument(Sync.PLACEHOLDER_PATH_ARGUMENT_NAME,
@@ -1095,13 +1278,18 @@ def parse_args():
                             help=Sync.PLACEHOLDER_PATH_ARGUMENT_HELP)
     syncParser.add_argument("--" + RecursiveSync.COMMAND_NAME,
                             action="store_true",
-                            default=False, 
+                            default=False,
                             help=RecursiveSync.HELP,
                             required=False)
     syncParser.add_argument("--" + RecursiveSync.NO_DOWNLOAD_ARGUMENT_NAME,
                             action="store_true",
-                            default=False, 
+                            default=False,
                             help=RecursiveSync.NO_DOWNLOAD_ARGUMENT_HELP,
+                            required=False)
+    syncParser.add_argument("--" + RecursiveSync.NO_WAIT_ARGUMENT_NAME,
+                            action="store_true",
+                            default=False,
+                            help=argparse.SUPPRESS,
                             required=False)
 
     streamParser = subparsers.add_parser(Stream.COMMAND_NAME, help=Stream.HELP)
@@ -1128,19 +1316,46 @@ def parse_args():
 
     xlThresholdParser = subparsers.add_parser(XLThreshold.COMMAND_NAME, help=XLThreshold.HELP)
     xlThresholdParser.add_argument(XLThreshold.THRESHOLD_ARGUMENT_NAME,
-                                  choices=XLThreshold.THRESHOLD_ARGUMENT_VALUES,
-                                  help=XLThreshold.THRESHOLD_ARGUMENT_HELP)
+                                   choices=XLThreshold.THRESHOLD_ARGUMENT_VALUES,
+                                   help=XLThreshold.THRESHOLD_ARGUMENT_HELP)
+
+    autoUnsyncThresholdParser = subparsers.add_parser(AutoUnsyncThreshold.COMMAND_NAME, help=AutoUnsyncThreshold.HELP)
+    autoUnsyncThresholdParser.add_argument(AutoUnsyncThreshold.THRESHOLD_ARGUMENT_NAME,
+                                   choices=AutoUnsyncThreshold.THRESHOLD_ARGUMENT_VALUES,
+                                   help=AutoUnsyncThreshold.THRESHOLD_ARGUMENT_HELP)
+
+    autoTrashThresholdParser = subparsers.add_parser(AutoTrashThreshold.COMMAND_NAME, help=AutoTrashThreshold.HELP)
+    autoTrashThresholdParser.add_argument(AutoTrashThreshold.THRESHOLD_ARGUMENT_NAME,
+                                           choices=AutoTrashThreshold.THRESHOLD_ARGUMENT_VALUES,
+                                           help=AutoTrashThreshold.THRESHOLD_ARGUMENT_HELP)
+
+    placeholderThresholdParser = subparsers.add_parser(PlaceholderThreshold.COMMAND_NAME, help=PlaceholderThreshold.HELP)
+    placeholderThresholdParser.add_argument(PlaceholderThreshold.THRESHOLD_ARGUMENT_NAME,
+                                   choices=PlaceholderThreshold.THRESHOLD_ARGUMENT_VALUES,
+                                   help=PlaceholderThreshold.THRESHOLD_ARGUMENT_HELP)
+
+    folderSyncRuleParser = subparsers.add_parser(FolderSyncRule.COMMAND_NAME,
+                                                       help=FolderSyncRule.HELP)
+    folderSyncRuleParser.add_argument(FolderSyncRule.LOCAL_PATH_ARGUMENT_NAME,
+                                            help=FolderSyncRule.LOCAL_PATH_ARGUMENT_HELP)
+    folderSyncRuleParser.add_argument(FolderSyncRule.THRESHOLD_ARGUMENT_NAME,
+                                      help=FolderSyncRule.THRESHOLD_ARGUMENT_HELP)
+    folderSyncRuleParser.add_argument("--" + FolderSyncRule.EXPAND_SUBFOLDERS_ARGUMENT_NAME,
+                                     help=FolderSyncRule.EXPAND_SUBFOLDERS_ARGUMENT_HELP,
+                                     required=False,
+                                     action="store_true",
+                                     default=False)
 
     encPassphraseParser = subparsers.add_parser(EncPassphrase.COMMAND_NAME, help=EncPassphrase.HELP)
     encPassphraseParser.add_argument(EncPassphrase.PASSPHRASE_ARGUMENT_NAME,
-                                  help=EncPassphrase.PASSPHRASE_ARGUMENT_HELP)
+                                     help=EncPassphrase.PASSPHRASE_ARGUMENT_HELP)
     encPassphraseParser.add_argument(EncPassphrase.ID_ARGUMENT_NAME,
-                                  help=EncPassphrase.ID_ARGUMENT_HELP)
+                                     help=EncPassphrase.ID_ARGUMENT_HELP)
     encPassphraseParser.add_argument("--" + EncPassphrase.INITIALIZE_ARGUMENT_NAME,
-                                  help=EncPassphrase.INITIALIZE_ARGUMENT_HELP,
-                                  required=False,
-                                  action="store_true",
-                                  default=False)
+                                     help=EncPassphrase.INITIALIZE_ARGUMENT_HELP,
+                                     required=False,
+                                     action="store_true",
+                                     default=False)
 
     syncStateParser = subparsers.add_parser(SyncState.COMMAND_NAME, help=SyncState.HELP)
     syncStateParser.add_argument(SyncState.PATH_ARGUMENT_NAME,
@@ -1181,6 +1396,7 @@ def parse_args():
                                               help=NotAllowedStatus.HELP)
     subparsers.add_parser(Deauthorize.COMMAND_NAME, help=Deauthorize.HELP)
     subparsers.add_parser(Diagnostics.COMMAND_NAME, help=Diagnostics.HELP)
+    subparsers.add_parser(BackupNow.COMMAND_NAME, help=BackupNow.HELP)
     subparsers.add_parser(EmptyTrash.COMMAND_NAME, help=EmptyTrash.HELP)
     subparsers.add_parser(RestoreTrash.COMMAND_NAME, help=RestoreTrash.HELP)
     subparsers.add_parser(Shutdown.COMMAND_NAME, help=Shutdown.HELP)
@@ -1217,6 +1433,48 @@ def expand_user(path):
     else:
         return os.path.expanduser(path)
 
+def output_message(message, stderr=False, color=None):
+    if not message:
+        return
+    if IS_WINDOWS:
+        if (stderr and sys.stderr.isatty()) or ((not stderr) and sys.stdout.isatty()):
+            # if we are writing to the console in windows we need to use WriteConsoleW for unicode output
+            handle = windll.kernel32.GetStdHandle(STD_ERR_HANDLE if stderr else STD_OUT_HANDLE)
+            if handle and handle != INVALID_HANDLE:
+                chars_written = c_int(0)
+                if color:
+                    consoleInfo = CONSOLE_SCREEN_BUFFER_INFO()
+                    windll.kernel32.GetConsoleScreenBufferInfo(handle, byref(consoleInfo))
+                    origionalConsoleColors = consoleInfo.wAttributes
+                    origionalBackgroundColor = origionalConsoleColors & 0x0070
+                    newColors = color | origionalBackgroundColor | OdriveSynchronousCommand._FG_COLOR_INTENSE
+                    windll.kernel32.SetConsoleTextAttribute(handle, newColors)
+                    windll.kernel32.WriteConsoleW(handle, message, len(message), byref(chars_written), None)
+                    windll.kernel32.SetConsoleTextAttribute(handle, origionalConsoleColors)
+                else:
+                    windll.kernel32.WriteConsoleW(handle, message, len(message), byref(chars_written), None)
+                return
+    if stderr:
+        sys.stderr.write(message)
+        sys.stderr.flush()
+    else:
+        sys.stdout.write(message)
+        sys.stdout.flush()
+
+def get_os_encoded_path(path):
+    path = make_unicode(path)
+    if sys.platform.startswith('win32'):
+        path = u'\\\\?\\' + path
+    else:
+        path = path.encode('utf-8')
+    return path
+
+def make_unicode(path):
+    if not isinstance(path, unicode):
+        path = unicode(path, 'utf-8')
+    else:
+        path = unicode(path.encode('utf-8'), 'utf-8')
+    return path
 
 def main():
     args = parse_args()
@@ -1243,6 +1501,8 @@ def main():
         command = Deauthorize(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
     elif args.command == Diagnostics.COMMAND_NAME:
         command = Diagnostics(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
+    elif args.command == BackupNow.COMMAND_NAME:
+        command = BackupNow(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
     elif args.command == Mount.COMMAND_NAME:
         command = Mount(agentPort=agentProtocolServerPort,
                         desktopPort=desktopProtocolServerPort,
@@ -1260,15 +1520,15 @@ def main():
     elif args.command == RemoveBackup.COMMAND_NAME:
         command = RemoveBackup(agentPort=agentProtocolServerPort,
                                desktopPort=desktopProtocolServerPort,
-                               localPath=os.path.abspath(expand_user(getattr(args,
-                                                                             RemoveBackup.LOCAL_PATH_ARGUMENT_NAME))))
+                               backupId=getattr(args, RemoveBackup.BACKUP_ID_ARGUMENT_NAME))
     elif args.command == Sync.COMMAND_NAME:
         syncPath = os.path.abspath(expand_user(getattr(args, Sync.PLACEHOLDER_PATH_ARGUMENT_NAME)))
         if getattr(args, RecursiveSync.COMMAND_NAME):
             command = RecursiveSync(agentPort=agentProtocolServerPort,
                                     desktopPort=desktopProtocolServerPort,
                                     folderPath=syncPath,
-                                    noDownload=getattr(args, RecursiveSync.NO_DOWNLOAD_ARGUMENT_NAME))
+                                    noDownload=getattr(args, RecursiveSync.NO_DOWNLOAD_ARGUMENT_NAME),
+                                    noWait=getattr(args, RecursiveSync.NO_WAIT_ARGUMENT_NAME))
         else:
             command = Sync(agentPort=agentProtocolServerPort,
                            desktopPort=desktopProtocolServerPort,
@@ -1325,12 +1585,30 @@ def main():
         command = XLThreshold(agentPort=agentProtocolServerPort,
                               desktopPort=desktopProtocolServerPort,
                               threshold=getattr(args, XLThreshold.THRESHOLD_ARGUMENT_NAME))
+    elif args.command == AutoUnsyncThreshold.COMMAND_NAME:
+        command = AutoUnsyncThreshold(agentPort=agentProtocolServerPort,
+                              desktopPort=desktopProtocolServerPort,
+                              threshold=getattr(args, AutoUnsyncThreshold.THRESHOLD_ARGUMENT_NAME))
+    elif args.command == AutoTrashThreshold.COMMAND_NAME:
+        command = AutoTrashThreshold(agentPort=agentProtocolServerPort,
+                              desktopPort=desktopProtocolServerPort,
+                              threshold=getattr(args, AutoTrashThreshold.THRESHOLD_ARGUMENT_NAME))
+    elif args.command == PlaceholderThreshold.COMMAND_NAME:
+        command = PlaceholderThreshold(agentPort=agentProtocolServerPort,
+                              desktopPort=desktopProtocolServerPort,
+                              threshold=getattr(args, PlaceholderThreshold.THRESHOLD_ARGUMENT_NAME))
+    elif args.command == FolderSyncRule.COMMAND_NAME:
+        command = FolderSyncRule(agentPort=agentProtocolServerPort,
+                              desktopPort=desktopProtocolServerPort,
+                              path=getattr(args, FolderSyncRule.LOCAL_PATH_ARGUMENT_NAME),
+                              threshold=getattr(args, FolderSyncRule.THRESHOLD_ARGUMENT_NAME),
+                              expandSubfolders=getattr(args, FolderSyncRule.EXPAND_SUBFOLDERS_ARGUMENT_NAME))
     elif args.command == EncPassphrase.COMMAND_NAME:
         command = EncPassphrase(agentPort=agentProtocolServerPort,
-                              desktopPort=desktopProtocolServerPort,
-                              passphrase = getattr(args, EncPassphrase.PASSPHRASE_ARGUMENT_NAME),
-                              id = getattr(args, EncPassphrase.ID_ARGUMENT_NAME),
-                              initialize = getattr(args, EncPassphrase.INITIALIZE_ARGUMENT_NAME))
+                                desktopPort=desktopProtocolServerPort,
+                                passphrase=getattr(args, EncPassphrase.PASSPHRASE_ARGUMENT_NAME),
+                                id=getattr(args, EncPassphrase.ID_ARGUMENT_NAME),
+                                initialize=getattr(args, EncPassphrase.INITIALIZE_ARGUMENT_NAME))
     elif args.command == EmptyTrash.COMMAND_NAME:
         command = EmptyTrash(agentPort=agentProtocolServerPort, desktopPort=desktopProtocolServerPort)
     elif args.command == RestoreTrash.COMMAND_NAME:

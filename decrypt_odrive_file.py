@@ -10,7 +10,7 @@ import os
 
 SALT_LENGTH = 8
 VERSION_LENGTH = 1
-CURRENT_VERSION = '1'
+VALID_VERSIONS = ['1', '2']
 INVALID_NAME = 'invalid.name.000'
 
 def hmac_sha_256(password, salt):
@@ -30,6 +30,10 @@ def unpad_pkcs7(s):
     return s[:-ord(s[len(s)-1:])]
 
 def decrypt_name(ciphertext_name, password):
+    if ciphertext_name.endswith(u".oenc"):
+        # This is an unencrypted name (version 2)
+        return ciphertext_name[:-5]
+
     try:
         ciphertext_bytes = ciphertext_name.encode('ascii')
     except (UnicodeEncodeError, UnicodeDecodeError) as e:
@@ -44,7 +48,7 @@ def decrypt_name(ciphertext_name, password):
 
     version_number = decoded_name[:VERSION_LENGTH]
 
-    if version_number != CURRENT_VERSION:
+    if version_number not in VALID_VERSIONS:
         #print("Encryption version: {} is not supported".format(version_number))
         return INVALID_NAME
 
@@ -81,21 +85,21 @@ def decrypt_and_rename(args,encrypted_path,decrypted_name):
     if decrypted_name != INVALID_NAME:
         if args.nameonly is False:
             if (os.path.isdir(encrypted_path)):
-                if args.renamefolder and not os.path.isdir(os.path.join(os.path.dirname(encrypted_path),decrypted_name)):
-                    os.rename(encrypted_path, os.path.join(os.path.dirname(encrypted_path),decrypted_name))
+                if args.renamefolder and not os.path.isdir(os.path.join(os.path.dirname(encrypted_path), decrypted_name)):
+                    os.rename(encrypted_path, os.path.join(os.path.dirname(encrypted_path), decrypted_name))
                     print("'" + encrypted_path + "' renamed to '" + decrypted_name + "'")
                 else:
                     print("'" + encrypted_path + "' not renamed to '" + decrypted_name + "'")
             else:
-                if not os.path.isfile(os.path.join(os.path.dirname(encrypted_path),decrypted_name)):
-                    with open(encrypted_path, 'rb') as in_file, open(os.path.join(os.path.dirname(encrypted_path),decrypted_name), 'wb') as out_file:
+                if not os.path.isfile(os.path.join(os.path.dirname(encrypted_path), decrypted_name)):
+                    with open(encrypted_path, 'rb') as in_file, open(os.path.join(os.path.dirname(encrypted_path), decrypted_name), 'wb') as out_file:
                         decrypt_file(in_file, out_file, args.password)
                     print("Decrypted file written to {}".format(os.path.abspath(out_file.name)))
         else:
-	  try:
-            print((os.path.abspath(encrypted_path)[4:] if sys.platform.startswith('win32') else os.path.abspath(encrypted_path)) + "@@@@@@" + decrypted_name)
-	  except:
-	    print("Error occurred with printing %s" % encrypted_path)
+          try:
+            print((os.path.abspath(encrypted_path)[4:] if sys.platform.startswith('win32') else os.path.abspath(encrypted_path)) + args.delimiter + decrypted_name)
+          except:
+            print("Error occurred with printing %s" % encrypted_path)
 
 def all_files(args, file_path):
     filesRemain = True    
@@ -104,24 +108,24 @@ def all_files(args, file_path):
         for root, dirs, files in os.walk(file_path):
             for f in files:
                 if not f.endswith(('.cloud', '.cloudf')):
-                    decrypted_file_name = decrypt_name(f,args.password)
-                    decrypted_file_path = os.path.join(root,decrypted_file_name) 
+                    decrypted_file_name = decrypt_name(f, args.password)
+                    decrypted_file_path = os.path.join(root, decrypted_file_name)
                     if ((decrypted_file_name != INVALID_NAME and not os.path.isfile(decrypted_file_path)) 
                          and ((args.filter is None)
-                         or (args.filter is not None and args.filter in os.path.join(root,decrypted_file_name)))):
+                         or (args.filter is not None and args.filter in os.path.join(root, decrypted_file_name)))):
                         if not args.nameonly:
                             filesRemain = True
-                        decrypt_and_rename(args,os.path.join(root,f),decrypted_file_name)
+                        decrypt_and_rename(args,os.path.join(root, f), decrypted_file_name)
             for d in dirs:
                 if not d.endswith('.xlarge'):
-                    decrypted_folder_name = decrypt_name(d,args.password)
-                    decrypted_folder_path = os.path.join(root,decrypted_folder_name)
+                    decrypted_folder_name = decrypt_name(d, args.password)
+                    decrypted_folder_path = os.path.join(root, decrypted_folder_name)
                     if ((decrypted_folder_name != INVALID_NAME and not os.path.isfile(decrypted_folder_path))
                          and ((args.filter is None)
                          or (args.filter is not None and args.filter in decrypted_folder_path))):
                         if not args.nameonly:
                             filesRemain = True
-                        decrypt_and_rename(args,os.path.join(root,d),decrypted_folder_name)
+                        decrypt_and_rename(args,os.path.join(root, d), decrypted_folder_name)
 
 def decrypt_file(in_file, out_file, password):
     calcHash = hashlib.sha256()
@@ -133,6 +137,7 @@ def decrypt_file(in_file, out_file, password):
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CBC, iv)
     next_chunk = ''
     finished = False
+    fileHash = None
     while not finished:
         chunk, next_chunk = next_chunk, cipher.decrypt(in_file.read(4096 * Crypto.Cipher.AES.block_size))
         if len(next_chunk) == 0:
@@ -148,12 +153,13 @@ def decrypt_file(in_file, out_file, password):
 
 def get_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from. **Will not decrypt placeholder files**",required=True)
-    parser.add_argument(u"--password", type=str, help=u"The passphrase",required=True)
-    parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decrypted name, only",required=False)
-    parser.add_argument(u"--renamefolder", action="store_true", default=False, help=u"Rename if the target is a folder",required=False)
-    parser.add_argument(u"--recursive", action="store_true", default=False, help=u"Recurse through given path",required=False)
-    parser.add_argument(u"--filter", type=str, help=u"Only process files/folders with this simple substring path filter (ex: 'xlarge')",required=False)
+    parser.add_argument(u"--path", type=str, help=u"The file to decrypt or the folder to start from. **Will not decrypt placeholder files**", required=True)
+    parser.add_argument(u"--password", type=str, help=u"The passphrase", required=True)
+    parser.add_argument(u"--nameonly", action="store_true", default=False, help=u"Print the decrypted name, only", required=False)
+    parser.add_argument(u"--delimiter", type=str, default=";", help=u"Delimeter to use for --nameonly printed output. Default is ';'", required=False)
+    parser.add_argument(u"--renamefolder", action="store_true", default=False, help=u"Rename if the target is a folder", required=False)
+    parser.add_argument(u"--recursive", action="store_true", default=False, help=u"Recurse through given path", required=False)
+    parser.add_argument(u"--filter", type=str, help=u"Only process files/folders with this simple substring path filter (ex: 'xlarge')", required=False)
     return parser.parse_args()
 
 def main():

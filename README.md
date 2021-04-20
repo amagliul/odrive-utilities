@@ -5,10 +5,11 @@ This repository contains a few odrive utilities.
 
 ```
 git clone https://github.com/amagliul/odrive-utilities.git
-virtualenv odrive-utilities
-cd odrive-utilities
-source bin/activate
-pip install wheel && pip install pycrypto # need these packages. 
+virtualenv od_venv
+source od_venv/bin/activate
+# need these packages.
+pip install wheel
+pip install pycrypto  
 python decrypt_odrive_file.py --help
 ```
 
